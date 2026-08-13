@@ -171,6 +171,59 @@
   }
 
   .btn-ghost:hover { border-color: var(--text-muted); color: var(--text); }
+  .btn-ghost.active { border-color: var(--cue); color: var(--cue); }
+
+  .favorites-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    width: 100%;
+    padding-top: 2px;
+  }
+
+  .favorites-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    margin-right: 2px;
+    flex-shrink: 0;
+  }
+
+  .fav-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 5px 4px 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .fav-chip .fav-add {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 0;
+  }
+
+  .fav-chip .fav-remove {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 2px 4px;
+    font-size: 11px;
+    line-height: 1;
+    border-radius: 50%;
+  }
+
+  .fav-chip .fav-remove:hover { color: var(--tally); }
 
   .hint {
     width: 100%;
@@ -226,6 +279,7 @@
     background: var(--surface-2);
     padding: 7px 10px;
     border-top: 1px solid var(--line);
+    flex-wrap: wrap;
   }
 
   .umd-tally {
@@ -269,23 +323,55 @@
 
   .umd-actions {
     display: flex;
-    gap: 4px;
+    gap: 2px;
     flex-shrink: 0;
+    margin-left: auto;
   }
 
   .umd-actions button {
     background: transparent;
     border: none;
     color: var(--text-muted);
-    padding: 4px 6px;
+    padding: 4px 5px;
     border-radius: 3px;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1;
   }
 
   .umd-actions button:hover {
     background: var(--line);
     color: var(--text);
+  }
+
+  .umd-actions button.fav-on {
+    color: var(--cue);
+  }
+
+  /* ---------- Drag-to-reorder & hero (resize) ---------- */
+
+  .tile.dragging {
+    opacity: 0.4;
+  }
+
+  .tile.drag-over {
+    outline: 2px dashed var(--cue);
+    outline-offset: -2px;
+  }
+
+  .umd {
+    cursor: grab;
+  }
+
+  .umd:active {
+    cursor: grabbing;
+  }
+
+  .tile.hero {
+    grid-column: span 2;
+  }
+
+  @media (max-width: 639px) {
+    .tile.hero { grid-column: span 1; }
   }
 
   /* ---------- Empty state ---------- */
@@ -422,8 +508,10 @@
     <input type="text" id="channelInput" placeholder="channel name" autocomplete="off">
     <button type="button" class="btn-primary" id="addSourceBtn">Add source</button>
     <button type="button" class="btn-ghost" id="copyLink">Copy link</button>
+    <button type="button" class="btn-ghost" id="autoRefreshToggle">Auto-refresh: off</button>
     <div class="hint" id="formHint">Twitch: just the channel name (e.g. "shroud")</div>
     <div class="hint" id="domainDebug" style="opacity:0.6;"></div>
+    <div class="favorites-bar" id="favoritesBar"></div>
   </div>
 </header>
 
@@ -446,6 +534,8 @@
   const formHint = document.getElementById('formHint');
   const streamCountEl = document.getElementById('streamCount');
   const copyLinkBtn = document.getElementById('copyLink');
+  const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+  const favoritesBar = document.getElementById('favoritesBar');
   const programView = document.getElementById('program-view');
   const programVideo = document.getElementById('program-video');
   const filmstrip = document.getElementById('filmstrip');
@@ -455,6 +545,11 @@
   let streams = []; // { id, platform, ident, label }
   let programId = null;
   let uidCounter = 0;
+  let heroKey = null; // "platform:ident" of the enlarged tile, or null
+  let favorites = []; // { platform, ident, ytType, label }
+  let autoRefreshEnabled = false;
+  let autoRefreshTimer = null;
+  const AUTO_REFRESH_MS = 30 * 60 * 1000; // 30 minutes
 
   const parentHost = window.location.hostname || 'example.com';
   document.getElementById('domainDebug').textContent = 'Embed domain detected: ' + (window.location.hostname || '(none — this is why embeds are blocked)');
@@ -488,6 +583,10 @@
     return null;
   }
 
+  function streamKey(stream) {
+    return stream.platform + ':' + stream.ident;
+  }
+
   function buildEmbedSrc(stream) {
     if (stream.platform === 'twitch') {
       return `https://player.twitch.tv/?channel=${encodeURIComponent(stream.ident)}&parent=${parentHost}&muted=true`;
@@ -498,6 +597,10 @@
       const startParam = stream.ytStart ? `&start=${stream.ytStart}` : '';
       return `https://www.youtube.com/embed/${encodeURIComponent(stream.ident)}?autoplay=1&mute=1${startParam}`;
     }
+  }
+
+  function buildEmbedSrcFresh(stream) {
+    return buildEmbedSrc(stream) + '&_cb=' + Date.now();
   }
 
   function addSource() {
@@ -538,6 +641,12 @@
   addSourceBtn.addEventListener('click', addSource);
   channelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addSource();
+  });
+
+  autoRefreshToggle.addEventListener('click', () => {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    saveAutoRefreshSetting();
+    applyAutoRefreshTimer();
   });
 
   copyLinkBtn.addEventListener('click', () => {
@@ -601,6 +710,141 @@
       });
     });
   }
+
+  const FAVORITES_KEY = 'multiviewer-favorites-v1';
+  const AUTOREFRESH_KEY = 'multiviewer-autorefresh-v1';
+  const HERO_KEY = 'multiviewer-hero-v1';
+
+  function saveFavorites() {
+    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)); } catch (e) {}
+  }
+
+  function loadFavorites() {
+    try {
+      const raw = localStorage.getItem(FAVORITES_KEY);
+      favorites = raw ? JSON.parse(raw) : [];
+    } catch (e) { favorites = []; }
+  }
+
+  function isFavorited(stream) {
+    return favorites.some(f => f.platform === stream.platform && f.ident === stream.ident);
+  }
+
+  function toggleFavorite(stream) {
+    if (isFavorited(stream)) {
+      favorites = favorites.filter(f => !(f.platform === stream.platform && f.ident === stream.ident));
+    } else {
+      favorites.push({
+        platform: stream.platform, ident: stream.ident,
+        ytType: stream.ytType || null, label: stream.label
+      });
+    }
+    saveFavorites();
+    renderFavorites();
+    render();
+  }
+
+  function addFromFavorite(fav) {
+    streams.push({
+      uid: 'u' + (uidCounter++),
+      platform: fav.platform,
+      ident: fav.ident,
+      ytType: fav.ytType || null,
+      ytStart: null,
+      label: fav.label
+    });
+    saveToStorage();
+    render();
+  }
+
+  function renderFavorites() {
+    favoritesBar.innerHTML = '';
+    if (favorites.length === 0) return;
+
+    const label = document.createElement('span');
+    label.className = 'favorites-label';
+    label.textContent = 'FAVORITES';
+    favoritesBar.appendChild(label);
+
+    favorites.forEach(fav => {
+      const chip = document.createElement('span');
+      chip.className = 'fav-chip';
+
+      const addBtn = document.createElement('button');
+      addBtn.className = 'fav-add';
+      addBtn.textContent = (fav.platform === 'twitch' ? 'TW ' : 'YT ') + fav.label;
+      addBtn.title = 'Add to wall';
+      addBtn.addEventListener('click', () => addFromFavorite(fav));
+      chip.appendChild(addBtn);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'fav-remove';
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'Remove favorite';
+      removeBtn.addEventListener('click', () => {
+        favorites = favorites.filter(f => f !== fav);
+        saveFavorites();
+        renderFavorites();
+        render();
+      });
+      chip.appendChild(removeBtn);
+
+      favoritesBar.appendChild(chip);
+    });
+  }
+
+  function saveAutoRefreshSetting() {
+    try { localStorage.setItem(AUTOREFRESH_KEY, autoRefreshEnabled ? '1' : '0'); } catch (e) {}
+  }
+
+  function loadAutoRefreshSetting() {
+    try { autoRefreshEnabled = localStorage.getItem(AUTOREFRESH_KEY) === '1'; } catch (e) { autoRefreshEnabled = false; }
+  }
+
+  function applyAutoRefreshTimer() {
+    if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+    autoRefreshToggle.textContent = 'Auto-refresh: ' + (autoRefreshEnabled ? 'on (30m)' : 'off');
+    autoRefreshToggle.classList.toggle('active', autoRefreshEnabled);
+    if (autoRefreshEnabled) {
+      autoRefreshTimer = setInterval(refreshAllTiles, AUTO_REFRESH_MS);
+    }
+  }
+
+  function refreshTile(stream) {
+    const tileEl = grid.querySelector(`.tile[data-uid="${stream.uid}"] iframe`);
+    if (tileEl) tileEl.src = buildEmbedSrcFresh(stream);
+    if (programId === stream.uid) {
+      const progFrame = programVideo.querySelector('iframe');
+      if (progFrame) progFrame.src = buildEmbedSrcFresh(stream);
+    }
+  }
+
+  function refreshAllTiles() {
+    streams.forEach(refreshTile);
+  }
+
+  function saveHero() {
+    try {
+      if (heroKey) localStorage.setItem(HERO_KEY, heroKey);
+      else localStorage.removeItem(HERO_KEY);
+    } catch (e) {}
+  }
+
+  function loadHero() {
+    try { heroKey = localStorage.getItem(HERO_KEY) || null; } catch (e) { heroKey = null; }
+  }
+
+  function reorderStreams(draggedUid, targetUid) {
+    if (draggedUid === targetUid) return;
+    const fromIdx = streams.findIndex(s => s.uid === draggedUid);
+    const toIdx = streams.findIndex(s => s.uid === targetUid);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const [moved] = streams.splice(fromIdx, 1);
+    streams.splice(toIdx, 0, moved);
+    saveToStorage();
+    render();
+  }
+
 
   function removeStream(uid) {
     streams = streams.filter(s => s.uid !== uid);
@@ -693,7 +937,20 @@
       stream.muted = stream.muted === undefined ? true : stream.muted;
 
       const tile = document.createElement('div');
-      tile.className = 'tile';
+      tile.className = 'tile' + (heroKey === streamKey(stream) ? ' hero' : '');
+      tile.dataset.uid = stream.uid;
+
+      tile.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        tile.classList.add('drag-over');
+      });
+      tile.addEventListener('dragleave', () => tile.classList.remove('drag-over'));
+      tile.addEventListener('drop', (e) => {
+        e.preventDefault();
+        tile.classList.remove('drag-over');
+        const draggedUid = e.dataTransfer.getData('text/plain');
+        reorderStreams(draggedUid, stream.uid);
+      });
 
       const wrap = document.createElement('div');
       wrap.className = 'video-wrap';
@@ -706,6 +963,16 @@
 
       const umd = document.createElement('div');
       umd.className = 'umd';
+      umd.draggable = true;
+      umd.title = 'Drag to reorder';
+      umd.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', stream.uid);
+        tile.classList.add('dragging');
+      });
+      umd.addEventListener('dragend', () => {
+        tile.classList.remove('dragging');
+        grid.querySelectorAll('.tile').forEach(t => t.classList.remove('drag-over'));
+      });
 
       const tally = document.createElement('span');
       tally.className = 'umd-tally';
@@ -730,6 +997,29 @@
       muteBtn.addEventListener('click', () => toggleMute(stream.uid, iframe, muteBtn));
       actions.appendChild(muteBtn);
 
+      const heroBtn = document.createElement('button');
+      heroBtn.textContent = '◱';
+      heroBtn.title = 'Make this the hero tile (double width)';
+      heroBtn.addEventListener('click', () => {
+        heroKey = (heroKey === streamKey(stream)) ? null : streamKey(stream);
+        saveHero();
+        render();
+      });
+      actions.appendChild(heroBtn);
+
+      const refreshBtn = document.createElement('button');
+      refreshBtn.textContent = '↻';
+      refreshBtn.title = 'Refresh this stream';
+      refreshBtn.addEventListener('click', () => refreshTile(stream));
+      actions.appendChild(refreshBtn);
+
+      const favBtn = document.createElement('button');
+      favBtn.textContent = isFavorited(stream) ? '★' : '☆';
+      favBtn.className = isFavorited(stream) ? 'fav-on' : '';
+      favBtn.title = 'Save as favorite';
+      favBtn.addEventListener('click', () => toggleFavorite(stream));
+      actions.appendChild(favBtn);
+
       const expandBtn = document.createElement('button');
       expandBtn.textContent = '⤢';
       expandBtn.title = 'Punch to program (fullscreen)';
@@ -747,6 +1037,12 @@
       grid.appendChild(tile);
     });
   }
+
+  loadFavorites();
+  renderFavorites();
+  loadHero();
+  loadAutoRefreshSetting();
+  applyAutoRefreshTimer();
 
   const params = new URLSearchParams(window.location.search);
   if (params.get('sources')) {
