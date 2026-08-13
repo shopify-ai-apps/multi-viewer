@@ -638,7 +638,7 @@
     streams.push(stream);
     channelInput.value = '';
     saveToStorage();
-    render();
+    appendTileForStream(stream);
   }
 
   addSourceBtn.addEventListener('click', addSource);
@@ -754,16 +754,17 @@
   }
 
   function addFromFavorite(fav) {
-    streams.push({
+    const stream = {
       uid: 'u' + (uidCounter++),
       platform: fav.platform,
       ident: fav.ident,
       ytType: fav.ytType || null,
       ytStart: null,
       label: fav.label
-    });
+    };
+    streams.push(stream);
     saveToStorage();
-    render();
+    appendTileForStream(stream);
   }
 
   function startRename(stream, labelEl, umdEl) {
@@ -979,6 +980,121 @@
     return Math.max(1, Math.floor(width / MIN_TILE_WIDTH));
   }
 
+  function buildTile(stream) {
+    stream.muted = stream.muted === undefined ? true : stream.muted;
+
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (heroKey === streamKey(stream) ? ' hero' : '');
+    tile.dataset.uid = stream.uid;
+
+    tile.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      tile.classList.add('drag-over');
+    });
+    tile.addEventListener('dragleave', () => tile.classList.remove('drag-over'));
+    tile.addEventListener('drop', (e) => {
+      e.preventDefault();
+      tile.classList.remove('drag-over');
+      const draggedUid = e.dataTransfer.getData('text/plain');
+      reorderStreams(draggedUid, stream.uid);
+    });
+
+    const wrap = document.createElement('div');
+    wrap.className = 'video-wrap';
+    const iframe = document.createElement('iframe');
+    iframe.src = buildEmbedSrc(stream);
+    iframe.allow = 'autoplay; fullscreen';
+    iframe.allowFullscreen = true;
+    wrap.appendChild(iframe);
+    tile.appendChild(wrap);
+
+    const umd = document.createElement('div');
+    umd.className = 'umd';
+    umd.draggable = true;
+    umd.title = 'Drag to reorder';
+    umd.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', stream.uid);
+      tile.classList.add('dragging');
+    });
+    umd.addEventListener('dragend', () => {
+      tile.classList.remove('dragging');
+      grid.querySelectorAll('.tile').forEach(t => t.classList.remove('drag-over'));
+    });
+
+    const tally = document.createElement('span');
+    tally.className = 'umd-tally';
+    umd.appendChild(tally);
+
+    const badge = document.createElement('span');
+    badge.className = 'umd-badge';
+    badge.textContent = stream.platform === 'twitch' ? 'TW' : 'YT';
+    umd.appendChild(badge);
+
+    const label = document.createElement('span');
+    label.className = 'umd-label';
+    label.textContent = stream.label;
+    label.title = 'Click to rename';
+    label.addEventListener('click', (e) => {
+      e.stopPropagation();
+      startRename(stream, label, umd);
+    });
+    umd.appendChild(label);
+
+    const actions = document.createElement('div');
+    actions.className = 'umd-actions';
+
+    const muteBtn = document.createElement('button');
+    muteBtn.textContent = '🔇';
+    muteBtn.title = 'Toggle mute';
+    muteBtn.addEventListener('click', () => toggleMute(stream.uid, iframe, muteBtn));
+    actions.appendChild(muteBtn);
+
+    const heroBtn = document.createElement('button');
+    heroBtn.textContent = '◱';
+    heroBtn.title = 'Make this the hero tile (double width)';
+    heroBtn.addEventListener('click', () => {
+      const newKey = (heroKey === streamKey(stream)) ? null : streamKey(stream);
+      heroKey = newKey;
+      saveHero();
+      // Toggle the class directly rather than calling render() — a full
+      // render() rebuilds every tile from scratch, which reloads every
+      // iframe. Hero is just a layout change, so patch the DOM in place.
+      grid.querySelectorAll('.tile.hero').forEach(t => t.classList.remove('hero'));
+      if (newKey) tile.classList.add('hero');
+      applyGridLayout();
+    });
+    actions.appendChild(heroBtn);
+
+    const refreshBtn = document.createElement('button');
+    refreshBtn.textContent = '↻';
+    refreshBtn.title = 'Refresh this stream';
+    refreshBtn.addEventListener('click', () => refreshTile(stream));
+    actions.appendChild(refreshBtn);
+
+    const favBtn = document.createElement('button');
+    favBtn.textContent = isFavorited(stream) ? '★' : '☆';
+    favBtn.className = isFavorited(stream) ? 'fav-on' : '';
+    favBtn.title = 'Save as favorite';
+    favBtn.addEventListener('click', () => toggleFavorite(stream, favBtn));
+    actions.appendChild(favBtn);
+
+    const expandBtn = document.createElement('button');
+    expandBtn.textContent = '⤢';
+    expandBtn.title = 'Punch to program (fullscreen)';
+    expandBtn.addEventListener('click', () => enterProgram(stream.uid));
+    actions.appendChild(expandBtn);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove source';
+    removeBtn.addEventListener('click', () => removeStream(stream.uid));
+    actions.appendChild(removeBtn);
+
+    umd.appendChild(actions);
+    tile.appendChild(umd);
+    return tile;
+  }
+
   function render() {
     streamCountEl.textContent = streams.length + (streams.length === 1 ? ' SOURCE' : ' SOURCES');
     brandDot.classList.toggle('active', streams.length > 0);
@@ -993,121 +1109,21 @@
       return;
     }
 
-    streams.forEach(stream => {
-      stream.muted = stream.muted === undefined ? true : stream.muted;
+    streams.forEach(stream => grid.appendChild(buildTile(stream)));
 
-      const tile = document.createElement('div');
-      tile.className = 'tile' + (heroKey === streamKey(stream) ? ' hero' : '');
-      tile.dataset.uid = stream.uid;
+    applyGridLayout();
+  }
 
-      tile.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        tile.classList.add('drag-over');
-      });
-      tile.addEventListener('dragleave', () => tile.classList.remove('drag-over'));
-      tile.addEventListener('drop', (e) => {
-        e.preventDefault();
-        tile.classList.remove('drag-over');
-        const draggedUid = e.dataTransfer.getData('text/plain');
-        reorderStreams(draggedUid, stream.uid);
-      });
+  function appendTileForStream(stream) {
+    // Adds exactly one new tile without touching any existing tile/iframe —
+    // used when a source is added so the rest of the wall keeps playing.
+    streamCountEl.textContent = streams.length + (streams.length === 1 ? ' SOURCE' : ' SOURCES');
+    brandDot.classList.toggle('active', true);
 
-      const wrap = document.createElement('div');
-      wrap.className = 'video-wrap';
-      const iframe = document.createElement('iframe');
-      iframe.src = buildEmbedSrc(stream);
-      iframe.allow = 'autoplay; fullscreen';
-      iframe.allowFullscreen = true;
-      wrap.appendChild(iframe);
-      tile.appendChild(wrap);
+    const emptyEl = grid.querySelector('.empty');
+    if (emptyEl) emptyEl.remove();
 
-      const umd = document.createElement('div');
-      umd.className = 'umd';
-      umd.draggable = true;
-      umd.title = 'Drag to reorder';
-      umd.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', stream.uid);
-        tile.classList.add('dragging');
-      });
-      umd.addEventListener('dragend', () => {
-        tile.classList.remove('dragging');
-        grid.querySelectorAll('.tile').forEach(t => t.classList.remove('drag-over'));
-      });
-
-      const tally = document.createElement('span');
-      tally.className = 'umd-tally';
-      umd.appendChild(tally);
-
-      const badge = document.createElement('span');
-      badge.className = 'umd-badge';
-      badge.textContent = stream.platform === 'twitch' ? 'TW' : 'YT';
-      umd.appendChild(badge);
-
-      const label = document.createElement('span');
-      label.className = 'umd-label';
-      label.textContent = stream.label;
-      label.title = 'Click to rename';
-      label.addEventListener('click', (e) => {
-        e.stopPropagation();
-        startRename(stream, label, umd);
-      });
-      umd.appendChild(label);
-
-      const actions = document.createElement('div');
-      actions.className = 'umd-actions';
-
-      const muteBtn = document.createElement('button');
-      muteBtn.textContent = '🔇';
-      muteBtn.title = 'Toggle mute';
-      muteBtn.addEventListener('click', () => toggleMute(stream.uid, iframe, muteBtn));
-      actions.appendChild(muteBtn);
-
-      const heroBtn = document.createElement('button');
-      heroBtn.textContent = '◱';
-      heroBtn.title = 'Make this the hero tile (double width)';
-      heroBtn.addEventListener('click', () => {
-        const newKey = (heroKey === streamKey(stream)) ? null : streamKey(stream);
-        heroKey = newKey;
-        saveHero();
-        // Toggle the class directly rather than calling render() — a full
-        // render() rebuilds every tile from scratch, which reloads every
-        // iframe. Hero is just a layout change, so patch the DOM in place.
-        grid.querySelectorAll('.tile.hero').forEach(t => t.classList.remove('hero'));
-        if (newKey) tile.classList.add('hero');
-        applyGridLayout();
-      });
-      actions.appendChild(heroBtn);
-
-      const refreshBtn = document.createElement('button');
-      refreshBtn.textContent = '↻';
-      refreshBtn.title = 'Refresh this stream';
-      refreshBtn.addEventListener('click', () => refreshTile(stream));
-      actions.appendChild(refreshBtn);
-
-      const favBtn = document.createElement('button');
-      favBtn.textContent = isFavorited(stream) ? '★' : '☆';
-      favBtn.className = isFavorited(stream) ? 'fav-on' : '';
-      favBtn.title = 'Save as favorite';
-      favBtn.addEventListener('click', () => toggleFavorite(stream, favBtn));
-      actions.appendChild(favBtn);
-
-      const expandBtn = document.createElement('button');
-      expandBtn.textContent = '⤢';
-      expandBtn.title = 'Punch to program (fullscreen)';
-      expandBtn.addEventListener('click', () => enterProgram(stream.uid));
-      actions.appendChild(expandBtn);
-
-      const removeBtn = document.createElement('button');
-      removeBtn.textContent = '✕';
-      removeBtn.title = 'Remove source';
-      removeBtn.addEventListener('click', () => removeStream(stream.uid));
-      actions.appendChild(removeBtn);
-
-      umd.appendChild(actions);
-      tile.appendChild(umd);
-      grid.appendChild(tile);
-    });
-
+    grid.appendChild(buildTile(stream));
     applyGridLayout();
   }
 
