@@ -6,7 +6,7 @@
 <title>MULTIVIEWER</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg: #0B0C0E;
@@ -574,7 +574,7 @@
     raw = raw.trim();
     // pull a start-time param if present (supports t=90, t=90s, start=90)
     let startSeconds = null;
-    const timeMatch = raw.match(/?:t|start=([0-9]+)s?/);
+    const timeMatch = raw.match(/[?&](?:t|start)=([0-9]+)s?/);
     if (timeMatch) startSeconds = parseInt(timeMatch[1], 10);
 
     // full URL forms
@@ -907,21 +907,7 @@
     const [moved] = streams.splice(fromIdx, 1);
     streams.splice(toIdx, 0, moved);
     saveToStorage();
-
-    // Move just the dragged tile's DOM node rather than calling render() —
-    // a full render() rebuilds every tile from scratch, which reloads every
-    // iframe. Reordering is just a DOM position change, so patch it in place,
-    // matching the direction of the array splice above.
-    const draggedTile = grid.querySelector(`.tile[data-uid="${draggedUid}"]`);
-    const targetTile = grid.querySelector(`.tile[data-uid="${targetUid}"]`);
-    if (draggedTile && targetTile) {
-      if (fromIdx < toIdx) {
-        targetTile.after(draggedTile);
-      } else {
-        targetTile.before(draggedTile);
-      }
-    }
-    applyGridLayout();
+    render();
   }
 
 
