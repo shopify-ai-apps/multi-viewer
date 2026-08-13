@@ -472,20 +472,9 @@
     color: var(--cue);
   }
 
-  /* ---------- Responsive grid columns ---------- */
-
-  @media (min-width: 640px) {
-    #grid.cols-2, #grid.cols-3, #grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
-  }
-
-  @media (min-width: 980px) {
-    #grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
-    #grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
-  }
-
-  @media (min-width: 1280px) {
-    #grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
-  }
+  /* Column count is computed dynamically in JS (applyGridLayout) from both
+     the stream count and available width, so no fixed breakpoint rules
+     are needed here. */
 
 </style>
 </head>
@@ -930,18 +919,24 @@
     });
   }
 
-  function updateGridColumns() {
-    grid.classList.remove('cols-2', 'cols-3', 'cols-4');
-    const n = streams.length;
-    if (n >= 5) grid.classList.add('cols-4');
-    else if (n === 3 || n === 4) grid.classList.add('cols-3');
-    else if (n === 2) grid.classList.add('cols-2');
+  // Minimum comfortable tile width before we'd rather wrap to more rows
+  // than shrink columns further.
+  const MIN_TILE_WIDTH = 240;
+
+  function idealColumnsForCount(n) {
+    if (n <= 1) return 1;
+    if (n === 2) return 2;
+    if (n <= 4) return 3;          // 3-4 streams: fill a single row of 3
+    return Math.ceil(n / 2);       // 5+: fill 2 rows fully before growing columns
+  }
+
+  function maxColumnsForWidth(width) {
+    return Math.max(1, Math.floor(width / MIN_TILE_WIDTH));
   }
 
   function render() {
     streamCountEl.textContent = streams.length + (streams.length === 1 ? ' SOURCE' : ' SOURCES');
     brandDot.classList.toggle('active', streams.length > 0);
-    updateGridColumns();
 
     grid.innerHTML = '';
 
@@ -1067,25 +1062,32 @@
   }
 
   function applyGridLayout() {
-    // Measure the real, current column count (it changes at CSS breakpoints),
-    // then give the hero tile a matching row span and set a row height that
-    // preserves 16:9 video proportions — so dense packing has clean, equal
-    // slots to fill beside the hero instead of leaving a gap.
-    const heroEl = grid.querySelector('.tile.hero');
-    if (heroEl) { heroEl.style.gridColumn = ''; heroEl.style.gridRow = ''; }
+    // Clear any previous inline span overrides on every tile first — if we
+    // only cleared the one currently found via .tile.hero, a tile that was
+    // just toggled OFF (class already removed) would keep its old inline
+    // grid-column/grid-row and stay visually enlarged.
+    grid.querySelectorAll('.tile').forEach(t => {
+      t.style.gridColumn = '';
+      t.style.gridRow = '';
+    });
 
-    const colStr = getComputedStyle(grid).gridTemplateColumns;
-    const cols = colStr.split(' ').filter(Boolean);
-    const colCount = cols.length || 1;
-    const colWidth = parseFloat(cols[0]) || grid.clientWidth;
+    const n = streams.length;
+    if (n === 0) return;
+
+    const gridWidth = grid.clientWidth || window.innerWidth;
+    const colCount = Math.min(idealColumnsForCount(n), maxColumnsForWidth(gridWidth));
+    grid.style.gridTemplateColumns = `repeat(${colCount}, 1fr)`;
+
+    const gapPx = parseFloat(getComputedStyle(grid).gap) || 10;
+    const colWidth = (gridWidth - gapPx * (colCount - 1)) / colCount;
 
     const sampleUmd = grid.querySelector('.umd');
     const umdHeight = sampleUmd ? sampleUmd.offsetHeight : 40;
-    const gapPx = parseFloat(getComputedStyle(grid).gap) || 10;
 
     const rowHeight = Math.round(colWidth * 9 / 16) + umdHeight;
     grid.style.setProperty('--row-h', rowHeight + 'px');
 
+    const heroEl = grid.querySelector('.tile.hero');
     if (heroEl) {
       const span = colCount >= 2 ? 2 : 1;
       heroEl.style.gridColumn = 'span ' + span;
