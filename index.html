@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MULTIVIEWER</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0B0C0E;
+    --surface: #17181C;
+    --surface-2: #1D1F24;
+    --line: #2A2C31;
+    --text: #ECEDEF;
+    --text-muted: #8B8E96;
+    --tally: #E8394A;
+    --cue: #F2A93B;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    height: 100%;
+    overflow-x: hidden;
+  }
+
+  ::selection { background: var(--tally); color: #fff; }
+
+  :focus-visible {
+    outline: 2px solid var(--cue);
+    outline-offset: 2px;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  /* ---------- Header / control bar ---------- */
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 4px;
+  }
+
+  .brand-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--tally);
+    box-shadow: 0 0 8px var(--tally);
+    flex-shrink: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .brand-dot.active { animation: pulse 1.6s ease-in-out infinite; }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .brand h1 {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 18px;
+    letter-spacing: 0.14em;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .brand span {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+
+  .add-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 1 1 420px;
+  }
+
+  .platform-toggle {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .platform-toggle button {
+    background: var(--surface-2);
+    border: none;
+    color: var(--text-muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 8px 12px;
+    letter-spacing: 0.05em;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .platform-toggle button.active {
+    background: var(--tally);
+    color: #fff;
+  }
+
+  .add-form input[type="text"] {
+    flex: 1 1 180px;
+    min-width: 140px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .add-form input[type="text"]::placeholder {
+    color: var(--text-muted);
+  }
+
+  .btn-primary {
+    background: var(--cue);
+    border: none;
+    color: #17181C;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 16px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .btn-ghost:hover { border-color: var(--text-muted); color: var(--text); }
+
+  .hint {
+    width: 100%;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding-left: 2px;
+  }
+
+  /* ---------- Grid ---------- */
+
+  main {
+    padding: 16px;
+    min-height: calc(100vh - 64px);
+  }
+
+  #grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(1, 1fr);
+  }
+
+  .tile {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tile .video-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+  }
+
+  .tile iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  /* UMD label bar — signature element */
+  .umd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2);
+    padding: 7px 10px;
+    border-top: 1px solid var(--line);
+  }
+
+  .umd-tally {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--line);
+    flex-shrink: 0;
+  }
+
+  .umd-tally.on {
+    background: var(--tally);
+    box-shadow: 0 0 6px var(--tally);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .umd-tally.on { animation: pulse 1.6s ease-in-out infinite; }
+  }
+
+  .umd-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+
+  .umd-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 2px 5px;
+    flex-shrink: 0;
+  }
+
+  .umd-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .umd-actions button {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .umd-actions button:hover {
+    background: var(--line);
+    color: var(--text);
+  }
+
+  /* ---------- Empty state ---------- */
+
+  .empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 64px 20px;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+  }
+
+  .empty p.lead {
+    font-family: 'Oswald', sans-serif;
+    font-size: 17px;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    margin: 0 0 6px;
+  }
+
+  .empty p.sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  /* ---------- Program mode (fullscreen) ---------- */
+
+  body.program-mode main { padding: 0; }
+  body.program-mode #grid { display: none; }
+
+  #program-view {
+    display: none;
+    flex-direction: column;
+    height: calc(100vh - 64px);
+  }
+
+  body.program-mode #program-view { display: flex; }
+
+  #program-video {
+    flex: 1;
+    position: relative;
+    background: #000;
+    min-height: 0;
+  }
+
+  #program-video iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  #filmstrip {
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    overflow-x: auto;
+  }
+
+  .fs-item {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .fs-item.on {
+    border-color: var(--tally);
+    color: var(--text);
+  }
+
+  .fs-item .umd-tally { width: 6px; height: 6px; }
+
+  .fs-back {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--cue);
+  }
+
+  /* ---------- Responsive grid columns ---------- */
+
+  @media (min-width: 640px) {
+    #grid.cols-2, #grid.cols-3, #grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (min-width: 980px) {
+    #grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+    #grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (min-width: 1280px) {
+    #grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-dot active" id="brandDot"></div>
+    <div>
+      <h1>MULTIVIEWER</h1>
+    </div>
+    <span id="streamCount">0 SOURCES</span>
+  </div>
+
+  <div class="add-form" id="addForm">
+    <div class="platform-toggle">
+      <button type="button" class="active" data-platform="twitch" id="btnTwitch">TWITCH</button>
+      <button type="button" data-platform="youtube" id="btnYoutube">YOUTUBE</button>
+    </div>
+    <input type="text" id="channelInput" placeholder="channel name" autocomplete="off">
+    <button type="button" class="btn-primary" id="addSourceBtn">Add source</button>
+    <button type="button" class="btn-ghost" id="copyLink">Copy link</button>
+    <div class="hint" id="formHint">Twitch: just the channel name (e.g. "shroud")</div>
+    <div class="hint" id="domainDebug" style="opacity:0.6;"></div>
+  </div>
+</header>
+
+<main>
+  <div id="grid"></div>
+
+  <div id="program-view">
+    <div id="program-video"></div>
+    <div id="filmstrip"></div>
+  </div>
+</main>
+
+<script>
+(function(){
+  const grid = document.getElementById('grid');
+  const addSourceBtn = document.getElementById('addSourceBtn');
+  const channelInput = document.getElementById('channelInput');
+  const btnTwitch = document.getElementById('btnTwitch');
+  const btnYoutube = document.getElementById('btnYoutube');
+  const formHint = document.getElementById('formHint');
+  const streamCountEl = document.getElementById('streamCount');
+  const copyLinkBtn = document.getElementById('copyLink');
+  const programView = document.getElementById('program-view');
+  const programVideo = document.getElementById('program-video');
+  const filmstrip = document.getElementById('filmstrip');
+  const brandDot = document.getElementById('brandDot');
+
+  let platform = 'twitch';
+  let streams = []; // { id, platform, ident, label }
+  let programId = null;
+  let uidCounter = 0;
+
+  const parentHost = window.location.hostname || 'example.com';
+  document.getElementById('domainDebug').textContent = 'Embed domain detected: ' + (window.location.hostname || '(none — this is why embeds are blocked)');
+
+  btnTwitch.addEventListener('click', () => setPlatform('twitch'));
+  btnYoutube.addEventListener('click', () => setPlatform('youtube'));
+
+  function setPlatform(p) {
+    platform = p;
+    btnTwitch.classList.toggle('active', p === 'twitch');
+    btnYoutube.classList.toggle('active', p === 'youtube');
+    formHint.textContent = p === 'twitch'
+      ? 'Twitch: just the channel name (e.g. "shroud")'
+      : 'YouTube: video ID, full watch URL, or a channel ID (starts with UC) for its live stream';
+    channelInput.placeholder = p === 'twitch' ? 'channel name' : 'video ID, URL, or channel ID';
+  }
+
+  function extractYoutubeId(raw) {
+    raw = raw.trim();
+    // full URL forms
+    const watchMatch = raw.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{6,})/);
+    if (watchMatch) return { type: 'video', id: watchMatch[1] };
+    if (raw.startsWith('UC') && raw.length > 10) return { type: 'channel', id: raw };
+    // bare video id heuristic
+    if (/^[a-zA-Z0-9_-]{6,}$/.test(raw)) return { type: 'video', id: raw };
+    return null;
+  }
+
+  function buildEmbedSrc(stream) {
+    if (stream.platform === 'twitch') {
+      return `https://player.twitch.tv/?channel=${encodeURIComponent(stream.ident)}&parent=${parentHost}&muted=true`;
+    } else {
+      if (stream.ytType === 'channel') {
+        return `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(stream.ident)}&autoplay=1&mute=1`;
+      }
+      return `https://www.youtube.com/embed/${encodeURIComponent(stream.ident)}?autoplay=1&mute=1`;
+    }
+  }
+
+  function addSource() {
+    const raw = channelInput.value.trim();
+    if (!raw) return;
+
+    let stream = null;
+    if (platform === 'twitch') {
+      stream = {
+        uid: 'u' + (uidCounter++),
+        platform: 'twitch',
+        ident: raw.replace(/^\/+/, ''),
+        ytType: null,
+        label: raw
+      };
+    } else {
+      const parsed = extractYoutubeId(raw);
+      if (!parsed) {
+        formHint.textContent = 'Could not parse that — try a video ID, watch URL, or channel ID (UC...)';
+        return;
+      }
+      stream = {
+        uid: 'u' + (uidCounter++),
+        platform: 'youtube',
+        ident: parsed.id,
+        ytType: parsed.type,
+        label: parsed.type === 'channel' ? parsed.id + ' (live)' : parsed.id
+      };
+    }
+
+    streams.push(stream);
+    channelInput.value = '';
+    render();
+  }
+
+  addSourceBtn.addEventListener('click', addSource);
+  channelInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addSource();
+  });
+
+  copyLinkBtn.addEventListener('click', () => {
+    const payload = streams.map(s => `${s.platform}:${s.ident}${s.ytType === 'channel' ? ':ch' : ''}`).join(',');
+    const url = window.location.origin + window.location.pathname + (payload ? ('?sources=' + encodeURIComponent(payload)) : '');
+    navigator.clipboard.writeText(url).then(() => {
+      copyLinkBtn.textContent = 'Copied';
+      setTimeout(() => copyLinkBtn.textContent = 'Copy link', 1400);
+    }).catch(() => {
+      copyLinkBtn.textContent = 'Copy failed';
+      setTimeout(() => copyLinkBtn.textContent = 'Copy link', 1400);
+    });
+  });
+
+  function loadFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const sources = params.get('sources');
+    if (!sources) return;
+    sources.split(',').forEach(entry => {
+      const parts = entry.split(':');
+      if (parts.length < 2) return;
+      const [plat, ident, tag] = parts;
+      streams.push({
+        uid: 'u' + (uidCounter++),
+        platform: plat,
+        ident: ident,
+        ytType: tag === 'ch' ? 'channel' : null,
+        label: plat === 'youtube' && tag === 'ch' ? ident + ' (live)' : ident
+      });
+    });
+  }
+
+  function removeStream(uid) {
+    streams = streams.filter(s => s.uid !== uid);
+    if (programId === uid) exitProgram();
+    render();
+  }
+
+  function toggleMute(uid, iframeEl, btnEl) {
+    // Twitch/YouTube iframes don't expose a simple cross-origin mute toggle without their JS APIs,
+    // so we reload the iframe with the opposite muted param — reliable across both platforms.
+    const stream = streams.find(s => s.uid === uid);
+    if (!stream) return;
+    stream.muted = !stream.muted;
+    iframeEl.src = buildEmbedSrc(stream).replace(
+      stream.platform === 'twitch' ? 'muted=true' : 'mute=1',
+      stream.platform === 'twitch' ? `muted=${stream.muted}` : `mute=${stream.muted ? 1 : 0}`
+    );
+    btnEl.textContent = stream.muted ? '🔇' : '🔊';
+  }
+
+  function enterProgram(uid) {
+    programId = uid;
+    document.body.classList.add('program-mode');
+    renderProgram();
+  }
+
+  function exitProgram() {
+    programId = null;
+    document.body.classList.remove('program-mode');
+    programVideo.innerHTML = '';
+  }
+
+  function renderProgram() {
+    const stream = streams.find(s => s.uid === programId);
+    if (!stream) { exitProgram(); return; }
+
+    programVideo.innerHTML = '';
+    const iframe = document.createElement('iframe');
+    iframe.src = buildEmbedSrc(stream);
+    iframe.allow = 'autoplay; fullscreen';
+    iframe.allowFullscreen = true;
+    programVideo.appendChild(iframe);
+
+    filmstrip.innerHTML = '';
+    const backBtn = document.createElement('button');
+    backBtn.className = 'fs-back';
+    backBtn.textContent = '⤢ Grid';
+    backBtn.addEventListener('click', exitProgram);
+    filmstrip.appendChild(backBtn);
+
+    streams.forEach(s => {
+      const item = document.createElement('button');
+      item.className = 'fs-item' + (s.uid === programId ? ' on' : '');
+      const dot = document.createElement('span');
+      dot.className = 'umd-tally' + (s.uid === programId ? ' on' : '');
+      item.appendChild(dot);
+      const label = document.createElement('span');
+      label.textContent = (s.platform === 'twitch' ? 'TW' : 'YT') + ' ' + s.label;
+      item.appendChild(label);
+      item.addEventListener('click', () => enterProgram(s.uid));
+      filmstrip.appendChild(item);
+    });
+  }
+
+  function updateGridColumns() {
+    grid.classList.remove('cols-2', 'cols-3', 'cols-4');
+    const n = streams.length;
+    if (n >= 5) grid.classList.add('cols-4');
+    else if (n === 3 || n === 4) grid.classList.add('cols-3');
+    else if (n === 2) grid.classList.add('cols-2');
+  }
+
+  function render() {
+    streamCountEl.textContent = streams.length + (streams.length === 1 ? ' SOURCE' : ' SOURCES');
+    brandDot.classList.toggle('active', streams.length > 0);
+    updateGridColumns();
+
+    grid.innerHTML = '';
+
+    if (streams.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.innerHTML = `<p class="lead">No sources on the wall yet</p><p class="sub">Add a Twitch channel or YouTube stream above to bring up a monitor.</p>`;
+      grid.appendChild(empty);
+      return;
+    }
+
+    streams.forEach(stream => {
+      stream.muted = stream.muted === undefined ? true : stream.muted;
+
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+
+      const wrap = document.createElement('div');
+      wrap.className = 'video-wrap';
+      const iframe = document.createElement('iframe');
+      iframe.src = buildEmbedSrc(stream);
+      iframe.allow = 'autoplay; fullscreen';
+      iframe.allowFullscreen = true;
+      wrap.appendChild(iframe);
+      tile.appendChild(wrap);
+
+      const umd = document.createElement('div');
+      umd.className = 'umd';
+
+      const tally = document.createElement('span');
+      tally.className = 'umd-tally';
+      umd.appendChild(tally);
+
+      const badge = document.createElement('span');
+      badge.className = 'umd-badge';
+      badge.textContent = stream.platform === 'twitch' ? 'TW' : 'YT';
+      umd.appendChild(badge);
+
+      const label = document.createElement('span');
+      label.className = 'umd-label';
+      label.textContent = stream.label;
+      umd.appendChild(label);
+
+      const actions = document.createElement('div');
+      actions.className = 'umd-actions';
+
+      const muteBtn = document.createElement('button');
+      muteBtn.textContent = '🔇';
+      muteBtn.title = 'Toggle mute';
+      muteBtn.addEventListener('click', () => toggleMute(stream.uid, iframe, muteBtn));
+      actions.appendChild(muteBtn);
+
+      const expandBtn = document.createElement('button');
+      expandBtn.textContent = '⤢';
+      expandBtn.title = 'Punch to program (fullscreen)';
+      expandBtn.addEventListener('click', () => enterProgram(stream.uid));
+      actions.appendChild(expandBtn);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'Remove source';
+      removeBtn.addEventListener('click', () => removeStream(stream.uid));
+      actions.appendChild(removeBtn);
+
+      umd.appendChild(actions);
+      tile.appendChild(umd);
+      grid.appendChild(tile);
+    });
+  }
+
+  loadFromUrl();
+  render();
+})();
+</script>
+
+</body>
+</html>
