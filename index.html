@@ -313,6 +313,20 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 1;
+    cursor: text;
+  }
+
+  .umd-label-edit {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--cue);
+    border-radius: 3px;
+    padding: 2px 5px;
+    flex: 1;
+    min-width: 0;
   }
 
   .umd-badge {
@@ -752,6 +766,37 @@
     render();
   }
 
+  function startRename(stream, labelEl, umdEl) {
+    // Dragging is keyed off the umd bar; disable it while typing so a
+    // click-and-drag inside the text field doesn't get mistaken for a
+    // reorder gesture.
+    umdEl.draggable = false;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'umd-label-edit';
+    input.value = stream.label;
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    function commit() {
+      const val = input.value.trim();
+      stream.label = val || stream.label;
+      saveToStorage();
+      labelEl.textContent = stream.label;
+      input.replaceWith(labelEl);
+      umdEl.draggable = true;
+    }
+
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      else if (e.key === 'Escape') { input.value = stream.label; input.blur(); }
+    });
+    input.addEventListener('blur', commit);
+  }
+
   function updateFavButtonsFor(platform, ident) {
     streams
       .filter(s => s.platform === platform && s.ident === ident)
@@ -1001,6 +1046,11 @@
       const label = document.createElement('span');
       label.className = 'umd-label';
       label.textContent = stream.label;
+      label.title = 'Click to rename';
+      label.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startRename(stream, label, umd);
+      });
       umd.appendChild(label);
 
       const actions = document.createElement('div');
