@@ -730,7 +730,7 @@
     return favorites.some(f => f.platform === stream.platform && f.ident === stream.ident);
   }
 
-  function toggleFavorite(stream) {
+  function toggleFavorite(stream, btnEl) {
     if (isFavorited(stream)) {
       favorites = favorites.filter(f => !(f.platform === stream.platform && f.ident === stream.ident));
     } else {
@@ -741,7 +741,13 @@
     }
     saveFavorites();
     renderFavorites();
-    render();
+    // Patch just this tile's star icon rather than calling render(), which
+    // would rebuild every tile and reload every iframe.
+    if (btnEl) {
+      const on = isFavorited(stream);
+      btnEl.textContent = on ? '★' : '☆';
+      btnEl.className = on ? 'fav-on' : '';
+    }
   }
 
   function addFromFavorite(fav) {
@@ -755,6 +761,20 @@
     });
     saveToStorage();
     render();
+  }
+
+  function updateFavButtonsFor(platform, ident) {
+    streams
+      .filter(s => s.platform === platform && s.ident === ident)
+      .forEach(s => {
+        const tileEl = grid.querySelector('.tile[data-uid="' + s.uid + '"]');
+        if (!tileEl) return;
+        const btn = tileEl.querySelector('button[title="Save as favorite"]');
+        if (!btn) return;
+        const on = isFavorited(s);
+        btn.textContent = on ? '★' : '☆';
+        btn.className = on ? 'fav-on' : '';
+      });
   }
 
   function renderFavorites() {
@@ -785,7 +805,7 @@
         favorites = favorites.filter(f => f !== fav);
         saveFavorites();
         renderFavorites();
-        render();
+        updateFavButtonsFor(fav.platform, fav.ident);
       });
       chip.appendChild(removeBtn);
 
@@ -1001,9 +1021,15 @@
       heroBtn.textContent = '◱';
       heroBtn.title = 'Make this the hero tile (double width)';
       heroBtn.addEventListener('click', () => {
-        heroKey = (heroKey === streamKey(stream)) ? null : streamKey(stream);
+        const newKey = (heroKey === streamKey(stream)) ? null : streamKey(stream);
+        heroKey = newKey;
         saveHero();
-        render();
+        // Toggle the class directly rather than calling render() — a full
+        // render() rebuilds every tile from scratch, which reloads every
+        // iframe. Hero is just a layout change, so patch the DOM in place.
+        grid.querySelectorAll('.tile.hero').forEach(t => t.classList.remove('hero'));
+        if (newKey) tile.classList.add('hero');
+        applyGridLayout();
       });
       actions.appendChild(heroBtn);
 
@@ -1017,7 +1043,7 @@
       favBtn.textContent = isFavorited(stream) ? '★' : '☆';
       favBtn.className = isFavorited(stream) ? 'fav-on' : '';
       favBtn.title = 'Save as favorite';
-      favBtn.addEventListener('click', () => toggleFavorite(stream));
+      favBtn.addEventListener('click', () => toggleFavorite(stream, favBtn));
       actions.appendChild(favBtn);
 
       const expandBtn = document.createElement('button');
