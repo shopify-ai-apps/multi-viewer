@@ -245,7 +245,7 @@
     gap: 10px;
     grid-template-columns: repeat(1, 1fr);
     grid-auto-flow: dense;
-    align-items: start;
+    grid-auto-rows: var(--row-h, auto);
   }
 
   .tile {
@@ -256,12 +256,15 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    height: 100%;
+    min-height: 0;
   }
 
   .tile .video-wrap {
     position: relative;
     width: 100%;
-    aspect-ratio: 16 / 9;
+    flex: 1;
+    min-height: 0;
     background: #000;
   }
 
@@ -368,13 +371,8 @@
     cursor: grabbing;
   }
 
-  .tile.hero {
-    grid-column: span 2;
-  }
-
-  @media (max-width: 639px) {
-    .tile.hero { grid-column: span 1; }
-  }
+  /* .tile.hero column/row span is set inline via JS, computed from the
+     actual measured column count, so it stays correct across breakpoints. */
 
   /* ---------- Empty state ---------- */
 
@@ -1038,7 +1036,42 @@
       tile.appendChild(umd);
       grid.appendChild(tile);
     });
+
+    applyGridLayout();
   }
+
+  function applyGridLayout() {
+    // Measure the real, current column count (it changes at CSS breakpoints),
+    // then give the hero tile a matching row span and set a row height that
+    // preserves 16:9 video proportions — so dense packing has clean, equal
+    // slots to fill beside the hero instead of leaving a gap.
+    const heroEl = grid.querySelector('.tile.hero');
+    if (heroEl) { heroEl.style.gridColumn = ''; heroEl.style.gridRow = ''; }
+
+    const colStr = getComputedStyle(grid).gridTemplateColumns;
+    const cols = colStr.split(' ').filter(Boolean);
+    const colCount = cols.length || 1;
+    const colWidth = parseFloat(cols[0]) || grid.clientWidth;
+
+    const sampleUmd = grid.querySelector('.umd');
+    const umdHeight = sampleUmd ? sampleUmd.offsetHeight : 40;
+    const gapPx = parseFloat(getComputedStyle(grid).gap) || 10;
+
+    const rowHeight = Math.round(colWidth * 9 / 16) + umdHeight;
+    grid.style.setProperty('--row-h', rowHeight + 'px');
+
+    if (heroEl) {
+      const span = colCount >= 2 ? 2 : 1;
+      heroEl.style.gridColumn = 'span ' + span;
+      heroEl.style.gridRow = 'span ' + span;
+    }
+  }
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(applyGridLayout, 150);
+  });
 
   loadFavorites();
   renderFavorites();
