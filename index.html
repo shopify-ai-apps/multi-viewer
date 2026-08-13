@@ -918,19 +918,6 @@
     render();
   }
 
-  function toggleMute(uid, iframeEl, btnEl) {
-    // Twitch/YouTube iframes don't expose a simple cross-origin mute toggle without their JS APIs,
-    // so we reload the iframe with the opposite muted param — reliable across both platforms.
-    const stream = streams.find(s => s.uid === uid);
-    if (!stream) return;
-    stream.muted = !stream.muted;
-    iframeEl.src = buildEmbedSrc(stream).replace(
-      stream.platform === 'twitch' ? 'muted=true' : 'mute=1',
-      stream.platform === 'twitch' ? `muted=${stream.muted}` : `mute=${stream.muted ? 1 : 0}`
-    );
-    btnEl.textContent = stream.muted ? '🔇' : '🔊';
-  }
-
   function enterProgram(uid) {
     programId = uid;
     document.body.classList.add('program-mode');
@@ -991,8 +978,6 @@
   }
 
   function buildTile(stream) {
-    stream.muted = stream.muted === undefined ? true : stream.muted;
-
     const tile = document.createElement('div');
     tile.className = 'tile' + (heroKey === streamKey(stream) ? ' hero' : '');
     tile.dataset.uid = stream.uid;
@@ -1052,12 +1037,6 @@
 
     const actions = document.createElement('div');
     actions.className = 'umd-actions';
-
-    const muteBtn = document.createElement('button');
-    muteBtn.textContent = '🔇';
-    muteBtn.title = 'Toggle mute';
-    muteBtn.addEventListener('click', () => toggleMute(stream.uid, iframe, muteBtn));
-    actions.appendChild(muteBtn);
 
     const heroBtn = document.createElement('button');
     heroBtn.textContent = '◱';
