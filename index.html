@@ -468,18 +468,23 @@
     btnYoutube.classList.toggle('active', p === 'youtube');
     formHint.textContent = p === 'twitch'
       ? 'Twitch: just the channel name (e.g. "shroud")'
-      : 'YouTube: video ID, full watch URL, or a channel ID (starts with UC) for its live stream';
+      : 'YouTube: any watch URL or video ID works (live or not). Use a channel ID (starts with UC) to follow its live stream.';
     channelInput.placeholder = p === 'twitch' ? 'channel name' : 'video ID, URL, or channel ID';
   }
 
   function extractYoutubeId(raw) {
     raw = raw.trim();
+    // pull a start-time param if present (supports t=90, t=90s, start=90)
+    let startSeconds = null;
+    const timeMatch = raw.match(/[?&](?:t|start)=([0-9]+)s?/);
+    if (timeMatch) startSeconds = parseInt(timeMatch[1], 10);
+
     // full URL forms
     const watchMatch = raw.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{6,})/);
-    if (watchMatch) return { type: 'video', id: watchMatch[1] };
-    if (raw.startsWith('UC') && raw.length > 10) return { type: 'channel', id: raw };
+    if (watchMatch) return { type: 'video', id: watchMatch[1], start: startSeconds };
+    if (raw.startsWith('UC') && raw.length > 10) return { type: 'channel', id: raw, start: null };
     // bare video id heuristic
-    if (/^[a-zA-Z0-9_-]{6,}$/.test(raw)) return { type: 'video', id: raw };
+    if (/^[a-zA-Z0-9_-]{6,}$/.test(raw)) return { type: 'video', id: raw, start: startSeconds };
     return null;
   }
 
@@ -490,7 +495,8 @@
       if (stream.ytType === 'channel') {
         return `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(stream.ident)}&autoplay=1&mute=1`;
       }
-      return `https://www.youtube.com/embed/${encodeURIComponent(stream.ident)}?autoplay=1&mute=1`;
+      const startParam = stream.ytStart ? `&start=${stream.ytStart}` : '';
+      return `https://www.youtube.com/embed/${encodeURIComponent(stream.ident)}?autoplay=1&mute=1${startParam}`;
     }
   }
 
@@ -518,6 +524,7 @@
         platform: 'youtube',
         ident: parsed.id,
         ytType: parsed.type,
+        ytStart: parsed.start,
         label: parsed.type === 'channel' ? parsed.id + ' (live)' : parsed.id
       };
     }
@@ -550,7 +557,7 @@
   function saveToStorage() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(streams.map(s => ({
-        platform: s.platform, ident: s.ident, ytType: s.ytType, label: s.label
+        platform: s.platform, ident: s.ident, ytType: s.ytType, ytStart: s.ytStart, label: s.label
       }))));
     } catch (e) { /* storage unavailable, fail silently */ }
   }
@@ -567,6 +574,7 @@
           platform: s.platform,
           ident: s.ident,
           ytType: s.ytType || null,
+          ytStart: s.ytStart || null,
           label: s.label
         });
       });
