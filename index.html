@@ -788,6 +788,16 @@
       labelEl.textContent = stream.label;
       input.replaceWith(labelEl);
       umdEl.draggable = true;
+
+      // Keep the favorites chip in sync — it stores its own snapshot of
+      // the label from whenever it was starred, so update it here rather
+      // than leaving it stale.
+      const fav = favorites.find(f => f.platform === stream.platform && f.ident === stream.ident);
+      if (fav) {
+        fav.label = stream.label;
+        saveFavorites();
+        renderFavorites();
+      }
     }
 
     input.addEventListener('click', (e) => e.stopPropagation());
