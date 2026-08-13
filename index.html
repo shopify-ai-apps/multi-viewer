@@ -524,6 +524,7 @@
 
     streams.push(stream);
     channelInput.value = '';
+    saveToStorage();
     render();
   }
 
@@ -543,6 +544,37 @@
       setTimeout(() => copyLinkBtn.textContent = 'Copy link', 1400);
     });
   });
+
+  const STORAGE_KEY = 'multiviewer-streams-v1';
+
+  function saveToStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(streams.map(s => ({
+        platform: s.platform, ident: s.ident, ytType: s.ytType, label: s.label
+      }))));
+    } catch (e) { /* storage unavailable, fail silently */ }
+  }
+
+  function loadFromStorage() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) return false;
+      parsed.forEach(s => {
+        streams.push({
+          uid: 'u' + (uidCounter++),
+          platform: s.platform,
+          ident: s.ident,
+          ytType: s.ytType || null,
+          label: s.label
+        });
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
   function loadFromUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -565,6 +597,7 @@
   function removeStream(uid) {
     streams = streams.filter(s => s.uid !== uid);
     if (programId === uid) exitProgram();
+    saveToStorage();
     render();
   }
 
@@ -707,7 +740,13 @@
     });
   }
 
-  loadFromUrl();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('sources')) {
+    loadFromUrl();
+    saveToStorage();
+  } else {
+    loadFromStorage();
+  }
   render();
 })();
 </script>
