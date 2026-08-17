@@ -416,7 +416,26 @@
   /* ---------- Program mode (fullscreen) ---------- */
 
   body.program-mode main { padding: 0; }
-  body.program-mode #grid { display: none; }
+
+  /* We never move the iframe itself in the DOM — browsers re-navigate
+     (reload) an iframe on ANY insertion, including being relocated to a
+     new parent. Instead the grid is hidden via visibility (which a
+     descendant CAN override) and taken out of flow, while the one active
+     tile's video-wrap gets position:fixed + visibility:visible so it
+     renders fullscreen without ever leaving its original DOM parent. */
+  body.program-mode #grid {
+    position: absolute;
+    width: 100%;
+    height: 0;
+    overflow: visible;
+    visibility: hidden;
+  }
+
+  .video-wrap.is-program {
+    visibility: visible;
+    position: fixed;
+    z-index: 15;
+  }
 
   #program-view {
     display: none;
@@ -441,6 +460,8 @@
     background: var(--surface);
     border-top: 1px solid var(--line);
     overflow-x: auto;
+    position: relative;
+    z-index: 20;
   }
 
   .fs-item {
@@ -869,12 +890,11 @@
   }
 
   function refreshTile(stream) {
+    // The iframe always lives in its original grid tile now — fullscreen
+    // mode only repositions it visually, it's never moved — so this is
+    // the one place we need to look regardless of program mode.
     const tileEl = grid.querySelector(`.tile[data-uid="${stream.uid}"] iframe`);
     if (tileEl) tileEl.src = buildEmbedSrcFresh(stream);
-    if (programId === stream.uid) {
-      const progFrame = programVideo.querySelector('iframe');
-      if (progFrame) progFrame.src = buildEmbedSrcFresh(stream);
-    }
   }
 
   function refreshAllTiles() {
@@ -937,33 +957,51 @@
     applyGridLayout();
   }
 
-  function moveWrapToProgram(uid) {
-    const wrap = grid.querySelector('.video-wrap[data-uid="' + uid + '"]');
-    if (wrap) programVideo.appendChild(wrap);
+  function positionWrapOverProgram(wrap) {
+    const rect = programVideo.getBoundingClientRect();
+    wrap.style.top = rect.top + 'px';
+    wrap.style.left = rect.left + 'px';
+    wrap.style.width = rect.width + 'px';
+    wrap.style.height = rect.height + 'px';
+    wrap.classList.add('is-program');
   }
 
-  function moveWrapBackToGrid(uid) {
-    const wrap = programVideo.querySelector('.video-wrap[data-uid="' + uid + '"]');
-    const tile = grid.querySelector('.tile[data-uid="' + uid + '"]');
-    if (wrap && tile) tile.prepend(wrap);
+  function clearWrapPosition(wrap) {
+    wrap.classList.remove('is-program');
+    wrap.style.top = '';
+    wrap.style.left = '';
+    wrap.style.width = '';
+    wrap.style.height = '';
+  }
+
+  function updateActiveProgramPosition() {
+    if (!programId) return;
+    const wrap = grid.querySelector('.video-wrap[data-uid="' + programId + '"]');
+    if (wrap) positionWrapOverProgram(wrap);
   }
 
   function enterProgram(uid) {
     if (!streams.some(s => s.uid === uid)) return;
-    // Moving the real video-wrap node (rather than building a new iframe)
-    // means the same player instance keeps running — no reload on entering
-    // fullscreen, returning to grid, or switching between streams here.
+    // The iframe's DOM parent never changes — browsers reload an iframe on
+    // ANY insertion, including being relocated, so instead we just
+    // reposition its wrapper on top of the fullscreen slot with
+    // position:fixed. Same player instance the whole time, no reload.
     if (programId && programId !== uid) {
-      moveWrapBackToGrid(programId);
+      const prevWrap = grid.querySelector('.video-wrap[data-uid="' + programId + '"]');
+      if (prevWrap) clearWrapPosition(prevWrap);
     }
     programId = uid;
     document.body.classList.add('program-mode');
-    moveWrapToProgram(uid);
+    // Wait a frame so #program-video has its final layout before measuring.
+    requestAnimationFrame(updateActiveProgramPosition);
     renderFilmstrip();
   }
 
   function exitProgram() {
-    if (programId) moveWrapBackToGrid(programId);
+    if (programId) {
+      const wrap = grid.querySelector('.video-wrap[data-uid="' + programId + '"]');
+      if (wrap) clearWrapPosition(wrap);
+    }
     programId = null;
     document.body.classList.remove('program-mode');
   }
@@ -1182,7 +1220,10 @@
   let resizeTimer = null;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(applyGridLayout, 150);
+    resizeTimer = setTimeout(() => {
+      applyGridLayout();
+      updateActiveProgramPosition();
+    }, 150);
   });
 
   loadFavorites();
