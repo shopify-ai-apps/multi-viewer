@@ -417,6 +417,11 @@
 
   body.program-mode main { padding: 0; }
 
+  html.program-mode, body.program-mode {
+    overflow: hidden;
+    height: 100%;
+  }
+
   /* We never move the iframe itself in the DOM — browsers re-navigate
      (reload) an iframe on ANY insertion, including being relocated to a
      new parent. Instead the grid is hidden via visibility (which a
@@ -992,6 +997,7 @@
       if (prevWrap) clearWrapPosition(prevWrap);
     }
     programId = uid;
+    document.documentElement.classList.add('program-mode');
     document.body.classList.add('program-mode');
     setViewportVars();
     // Wait a frame so #program-video has its final layout before measuring.
@@ -1005,6 +1011,7 @@
       if (wrap) clearWrapPosition(wrap);
     }
     programId = null;
+    document.documentElement.classList.remove('program-mode');
     document.body.classList.remove('program-mode');
   }
 
