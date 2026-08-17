@@ -440,7 +440,7 @@
   #program-view {
     display: none;
     flex-direction: column;
-    height: calc(100vh - 64px);
+    height: calc(var(--app-vh, 1vh) * 100 - var(--header-h, 64px));
   }
 
   body.program-mode #program-view { display: flex; }
@@ -557,6 +557,7 @@
   const programVideo = document.getElementById('program-video');
   const filmstrip = document.getElementById('filmstrip');
   const brandDot = document.getElementById('brandDot');
+  const headerEl = document.querySelector('header');
 
   let platform = 'twitch';
   let streams = []; // { id, platform, ident, label }
@@ -992,6 +993,7 @@
     }
     programId = uid;
     document.body.classList.add('program-mode');
+    setViewportVars();
     // Wait a frame so #program-video has its final layout before measuring.
     requestAnimationFrame(updateActiveProgramPosition);
     renderFilmstrip();
@@ -1217,15 +1219,33 @@
     }
   }
 
+  function setViewportVars() {
+    // CSS's 100vh doesn't account for mobile browser chrome (address bar,
+    // home-indicator area) that can overlap the "visible" viewport, which
+    // was pushing the bottom of the fullscreen video — and its native
+    // controls — out of sight. window.innerHeight tracks the real visible
+    // area, so measure it directly instead of trusting the vh unit.
+    document.documentElement.style.setProperty('--app-vh', (window.innerHeight * 0.01) + 'px');
+    const headerH = headerEl ? headerEl.offsetHeight : 64;
+    document.documentElement.style.setProperty('--header-h', headerH + 'px');
+  }
+
   let resizeTimer = null;
-  window.addEventListener('resize', () => {
+  function handleViewportChange() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      setViewportVars();
       applyGridLayout();
       updateActiveProgramPosition();
     }, 150);
-  });
+  }
+  window.addEventListener('resize', handleViewportChange);
+  window.addEventListener('orientationchange', handleViewportChange);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', handleViewportChange);
+  }
 
+  setViewportVars();
   loadFavorites();
   renderFavorites();
   loadHero();
