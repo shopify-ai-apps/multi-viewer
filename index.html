@@ -260,7 +260,7 @@
     min-height: 0;
   }
 
-  .tile .video-wrap {
+  .video-wrap {
     position: relative;
     width: 100%;
     flex: 1;
@@ -268,7 +268,7 @@
     background: #000;
   }
 
-  .tile iframe {
+  .video-wrap iframe {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -431,14 +431,7 @@
     position: relative;
     background: #000;
     min-height: 0;
-  }
-
-  #program-video iframe {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border: none;
+    display: flex;
   }
 
   #filmstrip {
@@ -901,13 +894,22 @@
 
   function reorderStreams(draggedUid, targetUid) {
     if (draggedUid === targetUid) return;
-    const fromIdx = streams.findIndex(s => s.uid === draggedUid);
-    const toIdx = streams.findIndex(s => s.uid === targetUid);
-    if (fromIdx === -1 || toIdx === -1) return;
-    const [moved] = streams.splice(fromIdx, 1);
-    streams.splice(toIdx, 0, moved);
+    const draggedEl = grid.querySelector('.tile[data-uid="' + draggedUid + '"]');
+    const targetEl = grid.querySelector('.tile[data-uid="' + targetUid + '"]');
+    if (!draggedEl || !targetEl) return;
+
+    // Move the existing DOM node rather than calling render() — a full
+    // render() rebuilds every tile from scratch, which reloads every
+    // iframe. Reordering is just a position change.
+    grid.insertBefore(draggedEl, targetEl);
+
+    // Re-derive the streams array order from the new DOM order so saved
+    // state stays in sync with what's on screen.
+    const newOrder = Array.from(grid.querySelectorAll('.tile')).map(el => el.dataset.uid);
+    streams.sort((a, b) => newOrder.indexOf(a.uid) - newOrder.indexOf(b.uid));
+
     saveToStorage();
-    render();
+    applyGridLayout();
   }
 
 
@@ -915,32 +917,58 @@
     streams = streams.filter(s => s.uid !== uid);
     if (programId === uid) exitProgram();
     saveToStorage();
-    render();
+
+    // Remove just this tile's node rather than calling render() — a full
+    // render() rebuilds every remaining tile, reloading every iframe.
+    const tileEl = grid.querySelector('.tile[data-uid="' + uid + '"]');
+    if (tileEl) tileEl.remove();
+
+    streamCountEl.textContent = streams.length + (streams.length === 1 ? ' SOURCE' : ' SOURCES');
+    brandDot.classList.toggle('active', streams.length > 0);
+
+    if (streams.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.innerHTML = `<p class="lead">No sources on the wall yet</p><p class="sub">Add a Twitch channel or YouTube stream above to bring up a monitor.</p>`;
+      grid.appendChild(empty);
+      return;
+    }
+
+    applyGridLayout();
+  }
+
+  function moveWrapToProgram(uid) {
+    const wrap = grid.querySelector('.video-wrap[data-uid="' + uid + '"]');
+    if (wrap) programVideo.appendChild(wrap);
+  }
+
+  function moveWrapBackToGrid(uid) {
+    const wrap = programVideo.querySelector('.video-wrap[data-uid="' + uid + '"]');
+    const tile = grid.querySelector('.tile[data-uid="' + uid + '"]');
+    if (wrap && tile) tile.prepend(wrap);
   }
 
   function enterProgram(uid) {
+    if (!streams.some(s => s.uid === uid)) return;
+    // Moving the real video-wrap node (rather than building a new iframe)
+    // means the same player instance keeps running — no reload on entering
+    // fullscreen, returning to grid, or switching between streams here.
+    if (programId && programId !== uid) {
+      moveWrapBackToGrid(programId);
+    }
     programId = uid;
     document.body.classList.add('program-mode');
-    renderProgram();
+    moveWrapToProgram(uid);
+    renderFilmstrip();
   }
 
   function exitProgram() {
+    if (programId) moveWrapBackToGrid(programId);
     programId = null;
     document.body.classList.remove('program-mode');
-    programVideo.innerHTML = '';
   }
 
-  function renderProgram() {
-    const stream = streams.find(s => s.uid === programId);
-    if (!stream) { exitProgram(); return; }
-
-    programVideo.innerHTML = '';
-    const iframe = document.createElement('iframe');
-    iframe.src = buildEmbedSrc(stream);
-    iframe.allow = 'autoplay; fullscreen';
-    iframe.allowFullscreen = true;
-    programVideo.appendChild(iframe);
-
+  function renderFilmstrip() {
     filmstrip.innerHTML = '';
     const backBtn = document.createElement('button');
     backBtn.className = 'fs-back';
@@ -996,6 +1024,7 @@
 
     const wrap = document.createElement('div');
     wrap.className = 'video-wrap';
+    wrap.dataset.uid = stream.uid;
     const iframe = document.createElement('iframe');
     iframe.src = buildEmbedSrc(stream);
     iframe.allow = 'autoplay; fullscreen';
